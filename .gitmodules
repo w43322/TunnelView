@@ -1,0 +1,6 @@
+[submodule "Vendor/libssh"]
+	path = Vendor/libssh
+	url = https://gitlab.com/libssh/libssh-mirror.git
+[submodule "Vendor/mbedtls"]
+	path = Vendor/mbedtls
+	url = https://github.com/Mbed-TLS/mbedtls.git

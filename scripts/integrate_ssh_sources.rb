@@ -3,7 +3,7 @@
 require "xcodeproj"
 
 ROOT = File.expand_path("..", __dir__)
-PROJECT_PATH = File.join(ROOT, "ioassh.xcodeproj")
+PROJECT_PATH = File.join(ROOT, "TunnelView.xcodeproj")
 
 def sources_from_cmake_set(path, variable)
   contents = File.read(path)
@@ -48,8 +48,8 @@ def configure_vendor_target(target, header_paths)
 end
 
 project = Xcodeproj::Project.open(PROJECT_PATH)
-app = project.targets.find { |target| target.name == "ioassh" }
-raise "ioassh target not found" unless app
+app = project.targets.find { |target| target.name == "TunnelView" }
+raise "TunnelView target not found" unless app
 raise "MbedCrypto target already exists" if project.targets.any? { |target| target.name == "MbedCrypto" }
 raise "LibSSH target already exists" if project.targets.any? { |target| target.name == "LibSSH" }
 
@@ -135,7 +135,7 @@ app.build_configurations.each do |configuration|
     "$(SRCROOT)/Vendor/apple-config/include",
     "$(SRCROOT)/Vendor/libssh/include"
   ]
-  settings["SWIFT_OBJC_BRIDGING_HEADER"] = "ioassh/ioassh-Bridging-Header.h"
+  settings["SWIFT_OBJC_BRIDGING_HEADER"] = "TunnelView/TunnelView-Bridging-Header.h"
   settings["EXECUTABLE_NAME"] = "ssh"
 end
 

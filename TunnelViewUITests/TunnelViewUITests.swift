@@ -1,13 +1,13 @@
 //
-//  ioasshUITests.swift
-//  ioasshUITests
+//  TunnelViewUITests.swift
+//  TunnelViewUITests
 //
 //  Created by wyl on 2026/8/17.
 //
 
 import XCTest
 
-final class ioasshUITests: XCTestCase {
+final class TunnelViewUITests: XCTestCase {
 
     override func setUpWithError() throws {
         // Put setup code here. This method is called before the invocation of each test method in the class.

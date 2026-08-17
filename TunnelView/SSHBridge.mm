@@ -16,7 +16,7 @@ NSString *const PasswordAccount = @"ssh.password";
 NSDictionary *passwordQuery(void) {
     return @{
         (__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
-        (__bridge id)kSecAttrService: NSBundle.mainBundle.bundleIdentifier ?: @"ioassh",
+        (__bridge id)kSecAttrService: NSBundle.mainBundle.bundleIdentifier ?: @"TunnelView",
         (__bridge id)kSecAttrAccount: PasswordAccount,
     };
 }
@@ -48,7 +48,7 @@ std::string utf8(NSString *value) {
     self = [super init];
     if (self != nil) {
         _tunnelStorage = new SSHTunnel();
-        _tunnelQueue = dispatch_queue_create("wang.yln.ioassh.tunnel", DISPATCH_QUEUE_SERIAL);
+        _tunnelQueue = dispatch_queue_create("wang.yln.tunnelview.tunnel", DISPATCH_QUEUE_SERIAL);
     }
     return self;
 }

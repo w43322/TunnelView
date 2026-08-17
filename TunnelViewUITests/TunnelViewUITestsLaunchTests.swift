@@ -1,13 +1,13 @@
 //
-//  ioasshUITestsLaunchTests.swift
-//  ioasshUITests
+//  TunnelViewUITestsLaunchTests.swift
+//  TunnelViewUITests
 //
 //  Created by wyl on 2026/8/17.
 //
 
 import XCTest
 
-final class ioasshUITestsLaunchTests: XCTestCase {
+final class TunnelViewUITestsLaunchTests: XCTestCase {
 
     override class var runsForEachTargetApplicationUIConfiguration: Bool {
         true

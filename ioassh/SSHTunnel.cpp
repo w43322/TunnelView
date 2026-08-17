@@ -16,6 +16,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <unistd.h>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -54,8 +55,31 @@ struct ForwardedConnection {
     ForwardedConnection(int fd, ssh_channel rawChannel)
         : localFileDescriptor(fd), channel(rawChannel) {}
 
-    ForwardedConnection(ForwardedConnection &&) = default;
-    ForwardedConnection &operator=(ForwardedConnection &&) = default;
+    ForwardedConnection(ForwardedConnection &&other) noexcept
+        : localFileDescriptor(std::exchange(other.localFileDescriptor, -1)),
+          channel(std::move(other.channel)),
+          opening(other.opening),
+          localReadClosed(other.localReadClosed),
+          channelEOFWasSent(other.channelEOFWasSent),
+          pendingForSSH(std::move(other.pendingForSSH)),
+          pendingForLocal(std::move(other.pendingForLocal)) {}
+
+    ForwardedConnection &operator=(ForwardedConnection &&other) noexcept {
+        if (this == &other) {
+            return *this;
+        }
+        if (localFileDescriptor >= 0) {
+            close(localFileDescriptor);
+        }
+        localFileDescriptor = std::exchange(other.localFileDescriptor, -1);
+        channel = std::move(other.channel);
+        opening = other.opening;
+        localReadClosed = other.localReadClosed;
+        channelEOFWasSent = other.channelEOFWasSent;
+        pendingForSSH = std::move(other.pendingForSSH);
+        pendingForLocal = std::move(other.pendingForLocal);
+        return *this;
+    }
 
     ~ForwardedConnection() {
         if (localFileDescriptor >= 0) {
@@ -336,8 +360,9 @@ void SSHTunnel::run(Configuration configuration) {
     std::array<uint8_t, 32 * 1024> transferBuffer{};
 
     while (!stopRequested_) {
+        const std::size_t polledConnectionCount = connections.size();
         std::vector<pollfd> descriptors;
-        descriptors.reserve(connections.size() + 1);
+        descriptors.reserve(polledConnectionCount + 1);
         descriptors.push_back({listener, POLLIN, 0});
         for (const auto &connection : connections) {
             short events = 0;
@@ -362,6 +387,9 @@ void SSHTunnel::run(Configuration configuration) {
                 setNonBlocking(clientFD);
                 int one = 1;
                 setsockopt(clientFD, IPPROTO_TCP, TCP_NODELAY, &one, sizeof(one));
+#ifdef SO_NOSIGPIPE
+                setsockopt(clientFD, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof(one));
+#endif
                 ssh_channel channel = ssh_channel_new(session.get());
                 if (channel == nullptr) {
                     close(clientFD);
@@ -371,7 +399,9 @@ void SSHTunnel::run(Configuration configuration) {
             }
         }
 
-        for (std::size_t index = 0; index < connections.size(); ++index) {
+        // accept() above can append to connections. Those new sockets were not
+        // present when descriptors was built, so process them on the next poll.
+        for (std::size_t index = 0; index < polledConnectionCount; ++index) {
             auto &connection = connections[index];
             pollfd descriptor = descriptors[index + 1];
 

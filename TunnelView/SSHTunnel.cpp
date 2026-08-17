@@ -6,6 +6,7 @@
 #include <array>
 #include <cerrno>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <fcntl.h>
 #include <memory>
@@ -22,6 +23,30 @@
 namespace {
 
 constexpr std::size_t kBufferLimit = 1024 * 1024;
+
+void tunnelLog(const char *stage, const std::string &message) {
+    std::fprintf(stderr, "[TunnelView][SSH][%s] %s\n", stage, message.c_str());
+    std::fflush(stderr);
+}
+
+class FileDescriptor final {
+public:
+    explicit FileDescriptor(int value = -1) noexcept : value_(value) {}
+
+    ~FileDescriptor() {
+        if (value_ >= 0) {
+            close(value_);
+        }
+    }
+
+    FileDescriptor(const FileDescriptor &) = delete;
+    FileDescriptor &operator=(const FileDescriptor &) = delete;
+
+    int get() const noexcept { return value_; }
+
+private:
+    int value_;
+};
 
 struct SessionDeleter {
     void operator()(ssh_session session) const {
@@ -107,13 +132,30 @@ int connectTCP(const std::string &host,
     int resolveResult = getaddrinfo(host.c_str(), portString.c_str(), &hints, &addresses);
     if (resolveResult != 0) {
         error = "解析 SSH 地址失败: " + std::string(gai_strerror(resolveResult));
+        tunnelLog("DNS", error);
         return -1;
     }
 
     int connectedFD = -1;
+    std::string lastFailure = "没有可用地址";
     for (addrinfo *address = addresses; address != nullptr; address = address->ai_next) {
+        char numericHost[NI_MAXHOST] = {};
+        if (getnameinfo(address->ai_addr,
+                        address->ai_addrlen,
+                        numericHost,
+                        sizeof(numericHost),
+                        nullptr,
+                        0,
+                        NI_NUMERICHOST) != 0) {
+            std::snprintf(numericHost, sizeof(numericHost), "%s", "未知地址");
+        }
+        const std::string endpoint = std::string(numericHost) + ":" + portString;
+        tunnelLog("TCP", "正在连接 " + endpoint);
+
         int fd = socket(address->ai_family, address->ai_socktype, address->ai_protocol);
         if (fd < 0) {
+            lastFailure = endpoint + " 创建 socket 失败: " + std::string(strerror(errno));
+            tunnelLog("TCP", lastFailure);
             continue;
         }
 
@@ -125,12 +167,16 @@ int connectTCP(const std::string &host,
         }
 
         if (!setNonBlocking(fd)) {
+            lastFailure = endpoint + " 设置非阻塞失败: " + std::string(strerror(errno));
+            tunnelLog("TCP", lastFailure);
             close(fd);
             continue;
         }
 
         int result = connect(fd, address->ai_addr, address->ai_addrlen);
         if (result != 0 && errno != EINPROGRESS) {
+            lastFailure = endpoint + " 连接失败: " + std::string(strerror(errno));
+            tunnelLog("TCP", lastFailure);
             close(fd);
             continue;
         }
@@ -139,6 +185,10 @@ int connectTCP(const std::string &host,
             pollfd descriptor{fd, POLLOUT, 0};
             result = poll(&descriptor, 1, static_cast<int>(timeout.count() * 1000));
             if (result <= 0) {
+                lastFailure = result == 0
+                    ? endpoint + " 连接超时"
+                    : endpoint + " 等待连接失败: " + std::string(strerror(errno));
+                tunnelLog("TCP", lastFailure);
                 close(fd);
                 continue;
             }
@@ -147,6 +197,9 @@ int connectTCP(const std::string &host,
             socklen_t errorLength = sizeof(socketError);
             if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &socketError, &errorLength) != 0 ||
                 socketError != 0) {
+                int failure = socketError != 0 ? socketError : errno;
+                lastFailure = endpoint + " 连接失败: " + std::string(strerror(failure));
+                tunnelLog("TCP", lastFailure);
                 close(fd);
                 continue;
             }
@@ -157,12 +210,13 @@ int connectTCP(const std::string &host,
             fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
         }
         connectedFD = fd;
+        tunnelLog("TCP", "已连接 " + endpoint + "，fd=" + std::to_string(fd));
         break;
     }
 
     freeaddrinfo(addresses);
     if (connectedFD < 0) {
-        error = "无法连接 SSH 服务器";
+        error = "无法连接 SSH 服务器: " + lastFailure;
     }
     return connectedFD;
 }
@@ -302,19 +356,21 @@ void SSHTunnel::completeStartup(uint16_t localPort, std::string error) {
 }
 
 void SSHTunnel::run(Configuration configuration) {
+    tunnelLog("START", "开始连接 " + configuration.host + ":" +
+                           std::to_string(configuration.sshPort));
     std::string error;
-    int socketFD = connectTCP(configuration.host,
-                              configuration.sshPort,
-                              std::chrono::seconds(10),
-                              error);
-    if (socketFD < 0) {
+    FileDescriptor socket(connectTCP(configuration.host,
+                                     configuration.sshPort,
+                                     std::chrono::seconds(10),
+                                     error));
+    if (socket.get() < 0) {
         completeStartup(0, std::move(error));
         return;
     }
 
     SessionPointer session(ssh_new());
     if (!session) {
-        close(socketFD);
+        tunnelLog("SESSION", "无法创建 SSH 会话");
         completeStartup(0, "无法创建 SSH 会话");
         return;
     }
@@ -322,31 +378,58 @@ void SSHTunnel::run(Configuration configuration) {
     unsigned int sshPort = configuration.sshPort;
     long timeoutSeconds = 10;
     int processConfig = 0;
-    ssh_options_set(session.get(), SSH_OPTIONS_HOST, configuration.host.c_str());
-    ssh_options_set(session.get(), SSH_OPTIONS_PORT, &sshPort);
-    ssh_options_set(session.get(), SSH_OPTIONS_USER, configuration.username.c_str());
-    ssh_options_set(session.get(), SSH_OPTIONS_TIMEOUT, &timeoutSeconds);
-    ssh_options_set(session.get(), SSH_OPTIONS_PROCESS_CONFIG, &processConfig);
-    ssh_options_set(session.get(), SSH_OPTIONS_FD, &socketFD);
-
-    if (ssh_connect(session.get()) != SSH_OK) {
-        completeStartup(0, "SSH 连接失败: " + std::string(ssh_get_error(session.get())));
+    int socketFD = socket.get();
+#if DEBUG
+    int logVerbosity = SSH_LOG_PROTOCOL;
+#else
+    int logVerbosity = SSH_LOG_WARNING;
+#endif
+    bool optionsSucceeded =
+        ssh_options_set(session.get(), SSH_OPTIONS_HOST, configuration.host.c_str()) == SSH_OK &&
+        ssh_options_set(session.get(), SSH_OPTIONS_PORT, &sshPort) == SSH_OK &&
+        ssh_options_set(session.get(), SSH_OPTIONS_USER, configuration.username.c_str()) == SSH_OK &&
+        ssh_options_set(session.get(), SSH_OPTIONS_TIMEOUT, &timeoutSeconds) == SSH_OK &&
+        ssh_options_set(session.get(), SSH_OPTIONS_PROCESS_CONFIG, &processConfig) == SSH_OK &&
+        ssh_options_set(session.get(), SSH_OPTIONS_LOG_VERBOSITY, &logVerbosity) == SSH_OK &&
+        ssh_options_set(session.get(), SSH_OPTIONS_FD, &socketFD) == SSH_OK;
+    if (!optionsSucceeded) {
+        std::string message = "设置 SSH 参数失败: " +
+                              std::string(ssh_get_error(session.get()));
+        tunnelLog("SESSION", message);
+        completeStartup(0, std::move(message));
         return;
     }
 
+    tunnelLog("HANDSHAKE", "开始 SSH 握手");
+    if (ssh_connect(session.get()) != SSH_OK) {
+        std::string message = "SSH 连接失败: " +
+                              std::string(ssh_get_error(session.get())) +
+                              " (code=" + std::to_string(ssh_get_error_code(session.get())) + ")";
+        tunnelLog("HANDSHAKE", message);
+        completeStartup(0, std::move(message));
+        return;
+    }
+
+    tunnelLog("AUTH", "SSH 握手完成，开始密码认证");
     int authenticationResult = ssh_userauth_password(session.get(),
                                                      nullptr,
                                                      configuration.password.c_str());
     std::fill(configuration.password.begin(), configuration.password.end(), '\0');
     configuration.password.clear();
     if (authenticationResult != SSH_AUTH_SUCCESS) {
-        completeStartup(0, "SSH 认证失败: " + std::string(ssh_get_error(session.get())));
+        std::string message = "SSH 认证失败: " +
+                              std::string(ssh_get_error(session.get())) +
+                              " (result=" + std::to_string(authenticationResult) + ")";
+        tunnelLog("AUTH", message);
+        completeStartup(0, std::move(message));
         return;
     }
+    tunnelLog("AUTH", "SSH 认证成功");
 
     uint16_t localPort = 0;
     int listener = makeLoopbackListener(localPort, error);
     if (listener < 0) {
+        tunnelLog("LISTENER", error);
         completeStartup(0, std::move(error));
         return;
     }
@@ -354,6 +437,9 @@ void SSHTunnel::run(Configuration configuration) {
     listenerFileDescriptor_ = listener;
     ssh_set_blocking(session.get(), 0);
     running_ = true;
+    tunnelLog("READY", "本地端口 " + std::to_string(localPort) +
+                           " 已映射到远端 " + configuration.serviceHost + ":" +
+                           std::to_string(configuration.servicePort));
     completeStartup(localPort, {});
 
     std::vector<ForwardedConnection> connections;
@@ -413,7 +499,10 @@ void SSHTunnel::run(Configuration configuration) {
                                                       localPort);
                 if (result == SSH_OK) {
                     connection.opening = false;
+                    tunnelLog("FORWARD", "远端转发通道已打开");
                 } else if (result != SSH_AGAIN) {
+                    tunnelLog("FORWARD", "打开远端转发失败: " +
+                                             std::string(ssh_get_error(session.get())));
                     connection.localReadClosed = true;
                     connection.channelEOFWasSent = true;
                     shutdown(connection.localFileDescriptor, SHUT_RDWR);
@@ -490,4 +579,5 @@ void SSHTunnel::run(Configuration configuration) {
         close(ownedListener);
     }
     running_ = false;
+    tunnelLog("STOP", "SSH 隧道已停止");
 }

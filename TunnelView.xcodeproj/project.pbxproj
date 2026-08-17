@@ -1187,6 +1187,7 @@
 				CODE_SIGN_ENTITLEMENTS = TunnelView/TunnelView.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4Y9X748UQZ;
 				ENABLE_PREVIEWS = YES;
 				EXECUTABLE_NAME = ssh;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1199,6 +1200,8 @@
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphoneos*]" = "用于连接您指定的局域网 SSH 服务器。";
+				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphonesimulator*]" = "用于连接您指定的局域网 SSH 服务器。";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;
@@ -1231,6 +1234,7 @@
 				CODE_SIGN_ENTITLEMENTS = TunnelView/TunnelView.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 4Y9X748UQZ;
 				ENABLE_PREVIEWS = YES;
 				EXECUTABLE_NAME = ssh;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -1243,6 +1247,8 @@
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphonesimulator*]" = YES;
+				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphoneos*]" = "用于连接您指定的局域网 SSH 服务器。";
+				"INFOPLIST_KEY_NSLocalNetworkUsageDescription[sdk=iphonesimulator*]" = "用于连接您指定的局域网 SSH 服务器。";
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UILaunchScreen_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIStatusBarStyle[sdk=iphoneos*]" = UIStatusBarStyleDefault;

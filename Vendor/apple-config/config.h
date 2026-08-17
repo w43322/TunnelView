@@ -4,6 +4,9 @@
 /* Version number of package */
 #define VERSION "0.12.0"
 
+/* Some SSH gateways reject non-OpenSSH client identification strings. */
+#define CLIENT_BANNER_SSH2 "SSH-2.0-OpenSSH_9.9"
+
 #define SYSCONFDIR "etc"
 #define BINARYDIR ""
 #define SOURCEDIR ""

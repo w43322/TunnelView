@@ -53,7 +53,9 @@ final class BrowserState: NSObject, ObservableObject, WKUIDelegate, WKNavigation
 
     private func setZoom(_ percentage: Int) {
         zoomPercentage = min(max(percentage, 50), 200)
+#if os(macOS)
         webView.pageZoom = CGFloat(zoomPercentage) / 100
+#endif
     }
 
     func webView(

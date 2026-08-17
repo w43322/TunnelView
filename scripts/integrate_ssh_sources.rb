@@ -136,7 +136,7 @@ app.build_configurations.each do |configuration|
     "$(SRCROOT)/Vendor/libssh/include"
   ]
   settings["SWIFT_OBJC_BRIDGING_HEADER"] = "ioassh/ioassh-Bridging-Header.h"
-  settings["EXECUTABLE_NAME[sdk=macosx*]"] = "ssh"
+  settings["EXECUTABLE_NAME"] = "ssh"
 end
 
 project.save
